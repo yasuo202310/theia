@@ -13,6 +13,8 @@
 <a name="breaking_changes_1.41.0">[Breaking Changes:](#breaking_changes_1.41.0)</a>
 
 - [deps] Bumped supported Node.js version from 16.x to >=18, you may need to update your environments.
+- [terminal] deprecated `terminal.integrated.rendererType` preference [#12691](https://github.com/eclipse-theia/theia/pull/12691)
+- [terminal] removed protected method `TerminalWidgetImpl.getTerminalRendererType` [#12691](https://github.com/eclipse-theia/theia/pull/12691)
 
 ## v1.40.0 - 07/27/2023
 

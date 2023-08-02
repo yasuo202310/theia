@@ -14,18 +14,34 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import * as yargs from '@theia/core/shared/yargs';
-import { startServer } from './server';
+import { Disposable } from '@theia/core';
+import { Socket } from 'socket.io';
+import { Message } from '../common/protocol';
 
-const command = yargs.version('0.0.1');
-command.positional('port', {
-    type: 'number',
-    default: 3001
-});
-command.positional('hostname', {
-    type: 'string',
-    default: 'localhost'
-});
-const args = command.parse(process.argv);
+export interface Channel {
+    onMessage(cb: (message: Message) => void): Disposable;
+    sendMessage(message: Message): void;
+    close(): void;
+}
 
-startServer(args);
+export class SocketIoChannel implements Channel {
+
+    private _socket: Socket;
+
+    constructor(socket: Socket) {
+        this._socket = socket;
+    }
+
+    onMessage(cb: (message: Message) => void): Disposable {
+        this._socket.on('message', cb);
+        return Disposable.create(() => {
+            this._socket.off('message', cb);
+        });
+    }
+    sendMessage(message: Message): void {
+        this._socket.send(message);
+    }
+    close(): void {
+        this._socket.disconnect();
+    }
+}

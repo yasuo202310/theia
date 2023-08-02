@@ -37,7 +37,7 @@ export namespace Message {
     }
 
     export function isResponse(message: unknown): message is ResponseMessage {
-        return is(message) && message.kind === 'notification';
+        return is(message) && message.kind === 'notification' && 'id' in message;
     }
 
     export function is(item: unknown): item is Message {
@@ -64,7 +64,7 @@ export interface RequestMessage extends Message {
     /**
      * The method's params.
      */
-    params?: unknown[] | object;
+    params?: unknown[];
 }
 
 export interface ResponseMessage extends Message {
@@ -87,7 +87,7 @@ export interface NotificationMessage extends Message {
     /**
      * The method's params.
      */
-    params?: unknown[] | object;
+    params?: unknown[];
 }
 
 export interface BroadcastMessage extends Message {
@@ -106,11 +106,13 @@ export interface BroadcastMessage extends Message {
     /**
      * The method's params.
      */
-    params?: unknown[] | object;
+    params?: unknown[];
 }
 
 export namespace BroadcastMessage {
-    export function create(signature: MessageSignature, clientId: string, params?: BroadcastMessage['params']): BroadcastMessage {
+    export function create<P extends []>(signature: BroadcastType<P>, clientId: string): BroadcastMessage;
+    export function create<P extends unknown[]>(signature: BroadcastType<P>, clientId: string, params: P): BroadcastMessage;
+    export function create<P extends unknown[]>(signature: BroadcastType<P>, clientId: string, params?: P): BroadcastMessage {
         return {
             clientId,
             method: signature.method,
@@ -135,21 +137,21 @@ export class AbstractMessageSignature implements MessageSignature {
     }
 }
 
-export class BroadcastType<P> extends AbstractMessageSignature {
+export class BroadcastType<P extends unknown[] = []> extends AbstractMessageSignature {
     public readonly _?: ['broadcast', P, void];
     constructor(method: string) {
         super(method);
     }
 }
 
-export class RequestType<P, R> extends AbstractMessageSignature {
+export class RequestType<P extends unknown[], R> extends AbstractMessageSignature {
     public readonly _?: ['request', P, R];
     constructor(method: string) {
         super(method);
     }
 }
 
-export class NotificationType<P> extends AbstractMessageSignature {
+export class NotificationType<P extends unknown[]> extends AbstractMessageSignature {
     public readonly _?: ['notification', P, void];
     constructor(method: string) {
         super(method);

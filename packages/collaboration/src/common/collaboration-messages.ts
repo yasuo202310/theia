@@ -17,10 +17,10 @@
 import { Peer, Permissions, Room } from './collaboration-types';
 import { BroadcastType, RequestType } from './protocol';
 
-export const PeerJoined = new BroadcastType<Peer>('peerJoined');
-export const PeerLeft = new BroadcastType<Peer>('peerLeft');
-export const UpdatePermissions = new BroadcastType<Permissions>('updatePermissions');
+export const PeerJoined = new BroadcastType<[Peer]>('peerJoined');
+export const PeerLeft = new BroadcastType<[Peer]>('peerLeft');
+export const UpdatePermissions = new BroadcastType<[Permissions]>('updatePermissions');
 
 export const RoomClosed = new BroadcastType('roomClosed');
-export const RoomCreate = new RequestType<Peer, Room>('roomCreate');
-export const RoomJoin = new RequestType<Peer, Room>('roomJoin');
+export const RoomCreate = new RequestType<[Peer], Room>('roomCreate');
+export const RoomJoin = new RequestType<[Peer], Room>('roomJoin');

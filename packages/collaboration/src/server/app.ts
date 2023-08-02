@@ -14,19 +14,23 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import * as http from 'http';
-import { Server } from 'socket.io';
+import * as yargs from '@theia/core/shared/yargs';
+import serverModule from './container';
+import { Container } from '@theia/core/shared/inversify';
+import { CollaborationServer } from './collaboration-server';
 
-export function startServer(args: Record<string, unknown>): void {
-    const httpServer = http.createServer();
-    const io = new Server(httpServer);
-    io.on('connection', socket => {
-        socket.on('message', data => {
+const command = yargs.version('0.0.1');
+command.positional('port', {
+    type: 'number',
+    default: 3001
+});
+command.positional('hostname', {
+    type: 'string',
+    default: 'localhost'
+});
+const args = command.parse(process.argv);
 
-        });
-        socket.off('message', () => {
-
-        });
-    });
-    httpServer.listen(Number(args.port), String(args.hostname));
-}
+const container = new Container();
+container.load(serverModule);
+const server = container.get(CollaborationServer);
+server.startServer(args);

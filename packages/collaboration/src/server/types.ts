@@ -14,30 +14,27 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { Socket } from 'socket.io';
-import { BroadcastMessage, NotificationMessage, RequestMessage } from '../common/protocol';
+import { Channel } from './channel';
 
 export interface Room {
-    id: string
-    host: Peer
-    guests: Peer[]
-    permissions: Permissions
-    sendBroadcast(origin: Peer, message: BroadcastMessage): void;
+    id: string;
+    host: Peer;
+    guests: Peer[];
+    readonly peers: readonly Peer[];
+    permissions: Permissions;
 }
 
 export interface PeerInfo {
     name: string
     email?: string
+    channel: Channel
 }
 
 export interface Peer {
-    id: string
-    name: string
-    email?: string
-    socket: Socket
-    sendNotification(message: NotificationMessage): void;
-    sendRequest(message: RequestMessage): Promise<unknown>;
-    sendBroadcast(origin: Peer, message: BroadcastMessage): void;
+    id: string;
+    name: string;
+    email?: string;
+    channel: Channel;
 }
 
 export type Permissions = Record<string, string>;

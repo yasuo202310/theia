@@ -14,19 +14,28 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
+import { inject } from '@theia/core/shared/inversify';
 import { v4 } from 'uuid';
-import { RoomClosed } from '../common/collaboration-messages';
+import { PeerJoined, RoomClosed } from '../common/collaboration-messages';
 import { BroadcastMessage } from '../common/protocol';
+import { MessageRelay } from './message-relay';
 import { Peer, Permissions, Room } from './types';
 
 export class RoomManager {
 
     protected rooms = new Map<string, Room>();
+    protected peers = new Map<string, Room>();
+
+    @inject(MessageRelay)
+    private readonly messageRelay: MessageRelay;
 
     closeRoom(id: string): void {
         const room = this.rooms.get(id);
         if (room) {
-            room.sendBroadcast(room.host, BroadcastMessage.create(RoomClosed, room.host.id));
+            this.messageRelay.sendBroadcast(room.host, BroadcastMessage.create(RoomClosed, room.host.id));
+            for (const peer of room.peers) {
+                this.peers.delete(peer.id);
+            }
             this.rooms.delete(id);
         }
     }
@@ -34,7 +43,22 @@ export class RoomManager {
     createRoom(host: Peer): Room {
         const room = new RoomImpl(v4(), host, {});
         this.rooms.set(room.id, room);
+        this.peers.set(host.id, room);
         return room;
+    }
+
+    getRoomById(id: string): Room | undefined {
+        return this.rooms.get(id);
+    }
+
+    getRoomByPeerId(id: string): Room | undefined {
+        return this.peers.get(id);
+    }
+
+    addGuest(room: Room, peer: Peer): void {
+        this.peers.set(peer.id, room);
+        room.guests.push(peer);
+        this.messageRelay.sendBroadcast(peer, BroadcastMessage.create(PeerJoined, peer.id, [peer]));
     }
 
 }
@@ -45,18 +69,14 @@ export class RoomImpl implements Room {
     guests: Peer[];
     permissions: Permissions;
 
+    get peers(): Peer[] {
+        return [this.host, ...this.guests];
+    }
+
     constructor(id: string, host: Peer, permissions: Permissions) {
         this.id = id;
         this.host = host;
         this.permissions = permissions;
         this.guests = [];
-    }
-
-    sendBroadcast(origin: Peer, message: BroadcastMessage): void {
-        for (const peer of [...this.guests, this.host]) {
-            if (peer.id !== origin.id) {
-                peer.sendBroadcast(origin, message);
-            }
-        }
     }
 }

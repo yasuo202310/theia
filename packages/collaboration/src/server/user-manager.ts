@@ -14,12 +14,26 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { Peer, Permissions } from './collaboration-types';
-import { BroadcastType, RequestType } from './protocol';
+import { injectable } from '@theia/core/shared/inversify';
+import { v4 } from 'uuid';
+import { User } from './types';
 
-export const PeerJoined = new BroadcastType<[Peer]>('peerJoined');
-export const PeerLeft = new BroadcastType<[Peer]>('peerLeft');
-export const UpdatePermissions = new BroadcastType<[Permissions]>('updatePermissions');
+@injectable()
+export class UserManager {
 
-export const RoomClosed = new BroadcastType('roomClosed');
-export const RoomJoin = new RequestType<[Peer], boolean>('roomJoin');
+    protected users = new Map<string, User>();
+
+    async registerUser(user: Omit<User, 'id'>): Promise<User> {
+        const registeredUser: User = {
+            ...user,
+            id: v4()
+        };
+        this.users.set(registeredUser.id, registeredUser);
+        return registeredUser;
+    }
+
+    async getUser(id: string): Promise<User | undefined> {
+        return this.users.get(id);
+    }
+
+}

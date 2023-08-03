@@ -14,12 +14,13 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { Peer, Permissions } from './collaboration-types';
-import { BroadcastType, RequestType } from './protocol';
+import { CommandContribution } from '@theia/core';
+import { ContainerModule } from '@theia/core/shared/inversify';
+import { CollaborationConnectionService } from './collaboration-connection-service';
+import { CollaborationFrontendContribution } from './collaboration-frontend-contribution';
 
-export const PeerJoined = new BroadcastType<[Peer]>('peerJoined');
-export const PeerLeft = new BroadcastType<[Peer]>('peerLeft');
-export const UpdatePermissions = new BroadcastType<[Permissions]>('updatePermissions');
-
-export const RoomClosed = new BroadcastType('roomClosed');
-export const RoomJoin = new RequestType<[Peer], boolean>('roomJoin');
+export default new ContainerModule(bind => {
+    bind(CollaborationConnectionService).toSelf().inSingletonScope();
+    bind(CollaborationFrontendContribution).toSelf().inSingletonScope();
+    bind(CommandContribution).toService(CollaborationFrontendContribution);
+});

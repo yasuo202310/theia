@@ -28,21 +28,9 @@ export interface Message {
 }
 
 export namespace Message {
-    export function isNotification(message: unknown): message is NotificationMessage {
-        return is(message) && message.kind === 'notification';
-    }
-
-    export function isRequest(message: unknown): message is RequestMessage {
-        return is(message) && message.kind === 'request';
-    }
-
-    export function isResponse(message: unknown): message is ResponseMessage {
-        return is(message) && message.kind === 'notification' && 'id' in message;
-    }
-
     export function is(item: unknown): item is Message {
         const message = item as Message;
-        return typeof message === 'object' && message && typeof message.version === 'string' && message.kind === 'string';
+        return typeof message === 'object' && message && typeof message.version === 'string' && typeof message.kind === 'string';
     }
 }
 
@@ -67,6 +55,23 @@ export interface RequestMessage extends Message {
     params?: unknown[];
 }
 
+export namespace RequestMessage {
+    export function create<P extends [], R>(signature: RequestType<P, R>, id: number | string): RequestMessage;
+    export function create<P extends unknown[], R>(signature: RequestType<P, R>, id: number | string, params: P): RequestMessage;
+    export function create<P extends unknown[], R>(signature: RequestType<P, R>, id: number | string, params?: P): RequestMessage {
+        return {
+            id,
+            method: signature.method,
+            kind: 'request',
+            version: VERSION,
+            params
+        };
+    }
+    export function is(message: unknown): message is RequestMessage {
+        return Message.is(message) && message.kind === 'request';
+    }
+}
+
 export interface ResponseMessage extends Message {
     /**
      * The original request id.
@@ -74,6 +79,20 @@ export interface ResponseMessage extends Message {
     id: number | string;
     kind: 'response';
     response: unknown;
+}
+
+export namespace ResponseMessage {
+    export function create(id: number | string, response: unknown): ResponseMessage {
+        return {
+            kind: 'response',
+            version: VERSION,
+            id,
+            response
+        };
+    }
+    export function is(message: unknown): message is ResponseMessage {
+        return Message.is(message) && message.kind === 'response';
+    }
 }
 
 export interface NotificationMessage extends Message {
@@ -88,6 +107,22 @@ export interface NotificationMessage extends Message {
      * The method's params.
      */
     params?: unknown[];
+}
+
+export namespace NotificationMessage {
+    export function create<P extends []>(signature: NotificationType<P>): NotificationMessage;
+    export function create<P extends unknown[]>(signature: NotificationType<P>, params: P): NotificationMessage;
+    export function create<P extends unknown[]>(signature: NotificationType<P>, params?: P): NotificationMessage {
+        return {
+            method: signature.method,
+            kind: 'notification',
+            version: VERSION,
+            params
+        };
+    }
+    export function is(message: unknown): message is NotificationMessage {
+        return Message.is(message) && message.kind === 'notification';
+    }
 }
 
 export interface BroadcastMessage extends Message {

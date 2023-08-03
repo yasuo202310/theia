@@ -14,8 +14,26 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { ContainerModule } from '@theia/core/shared/inversify';
+import { Container, ContainerModule } from '@theia/core/shared/inversify';
+import { CollaborationServer } from './collaboration-server';
+import { CredentialsManager } from './credentials-manager';
+import { MessageRelay } from './message-relay';
+import { PeerFactory, PeerImpl } from './peer';
+import { RoomManager } from './room-manager';
+import { PeerInfo } from './types';
+import { UserManager } from './user-manager';
 
 export default new ContainerModule(bind => {
-
+    bind(CollaborationServer).toSelf().inSingletonScope();
+    bind(RoomManager).toSelf().inSingletonScope();
+    bind(CredentialsManager).toSelf().inSingletonScope();
+    bind(UserManager).toSelf().inSingletonScope();
+    bind(MessageRelay).toSelf().inSingletonScope();
+    bind(PeerImpl).toSelf().inTransientScope();
+    bind(PeerFactory).toFactory(context => (peerInfo: PeerInfo) => {
+        const child = new Container();
+        child.parent = context.container;
+        child.bind(PeerInfo).toConstantValue(peerInfo);
+        return child.get(PeerImpl);
+    });
 });

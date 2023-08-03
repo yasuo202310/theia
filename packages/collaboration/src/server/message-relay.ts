@@ -14,11 +14,10 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { inject, injectable } from '@theia/core/shared/inversify';
+import { injectable } from '@theia/core/shared/inversify';
 import { Deferred } from '@theia/core/lib/common/promise-util';
 import { v4 } from 'uuid';
 import { BroadcastMessage, NotificationMessage, RequestMessage, ResponseMessage } from '../common/protocol';
-import { RoomManager } from './room-manager';
 import { Peer } from './types';
 
 export interface RelayedRequest {
@@ -32,9 +31,6 @@ export class MessageRelay {
 
     protected requestMap = new Map<string, RelayedRequest>();
 
-    @inject(RoomManager)
-    private readonly roomManager: RoomManager;
-
     pushResponse(receiver: Peer, message: ResponseMessage): void {
         const relayedRequest = this.requestMap.get(message.id.toString());
         if (relayedRequest) {
@@ -43,11 +39,7 @@ export class MessageRelay {
         }
     }
 
-    sendRequest(origin: Peer, message: RequestMessage): Promise<unknown> {
-        const room = this.roomManager.getRoomByPeerId(origin.id);
-        if (!room) {
-            throw new Error("Origin peer doesn't belong to any room");
-        }
+    sendRequest(target: Peer, message: RequestMessage): Promise<unknown> {
         const deferred = new Deferred<unknown>();
         const messageId = message.id;
         const key = v4();
@@ -58,28 +50,24 @@ export class MessageRelay {
                 this.requestMap.delete(key);
             }
         });
-        const host = room.host;
-        const hostMessage: RequestMessage = {
+        const targetMessage: RequestMessage = {
             ...message,
             id: key
         };
-        host.channel.sendMessage(hostMessage);
+        target.channel.sendMessage(targetMessage);
         return deferred.promise;
     }
 
-    sendNotification(origin: Peer, message: NotificationMessage): void {
-        const room = this.roomManager.getRoomByPeerId(origin.id);
-        if (!room) {
-            throw new Error("Origin peer doesn't belong to any room");
-        }
-        room.host.channel.sendMessage(message);
+    sendNotification(target: Peer, message: NotificationMessage): void {
+        target.channel.sendMessage(message);
     }
 
     sendBroadcast(origin: Peer, message: BroadcastMessage): void {
-        const room = this.roomManager.getRoomByPeerId(origin.id);
+        const room = origin.room;
         if (!room) {
             throw new Error("Origin peer doesn't belong to any room");
         }
+        message.clientId = origin.id;
         for (const peer of room.peers) {
             if (peer !== origin) {
                 peer.channel.sendMessage(message);

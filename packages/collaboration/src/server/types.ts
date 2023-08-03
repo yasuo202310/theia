@@ -15,6 +15,7 @@
 // *****************************************************************************
 
 import { Channel } from './channel';
+import * as protocol from '../common/collaboration-types';
 
 export interface Room {
     id: string;
@@ -24,17 +25,25 @@ export interface Room {
     permissions: Permissions;
 }
 
+export interface User {
+    id: string;
+    name: string;
+    email?: string;
+}
+
+export const PeerInfo = Symbol('PeerInfo');
+
 export interface PeerInfo {
-    name: string
-    email?: string
-    channel: Channel
+    user: User;
+    channel: Channel;
 }
 
 export interface Peer {
     id: string;
-    name: string;
-    email?: string;
+    user: User;
     channel: Channel;
+    room: Room;
+    toProtocol(): protocol.Peer
 }
 
 export type Permissions = Record<string, string>;

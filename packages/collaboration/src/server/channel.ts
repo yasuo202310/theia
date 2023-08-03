@@ -14,7 +14,7 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { Disposable } from '@theia/core';
+import { Disposable, Emitter, Event } from '@theia/core';
 import { Socket } from 'socket.io';
 import { Message } from '../common/protocol';
 
@@ -22,14 +22,24 @@ export interface Channel {
     onMessage(cb: (message: Message) => void): Disposable;
     sendMessage(message: Message): void;
     close(): void;
+    onClose: Event<void>;
 }
 
 export class SocketIoChannel implements Channel {
+
+    private onDidCloseEmitter = new Emitter<void>();
+
+    get onClose(): Event<void> {
+        return this.onDidCloseEmitter.event;
+    }
 
     private _socket: Socket;
 
     constructor(socket: Socket) {
         this._socket = socket;
+        this._socket.on('disconnect', () => {
+            this.onDidCloseEmitter.fire();
+        });
     }
 
     onMessage(cb: (message: Message) => void): Disposable {
@@ -38,10 +48,12 @@ export class SocketIoChannel implements Channel {
             this._socket.off('message', cb);
         });
     }
+
     sendMessage(message: Message): void {
         this._socket.send(message);
     }
+
     close(): void {
-        this._socket.disconnect();
+        this._socket.disconnect(true);
     }
 }

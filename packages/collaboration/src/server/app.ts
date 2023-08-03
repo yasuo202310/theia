@@ -14,23 +14,35 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
+import 'reflect-metadata';
 import * as yargs from '@theia/core/shared/yargs';
 import serverModule from './container';
 import { Container } from '@theia/core/shared/inversify';
 import { CollaborationServer } from './collaboration-server';
 
-const command = yargs.version('0.0.1');
-command.positional('port', {
-    type: 'number',
-    default: 3001
-});
-command.positional('hostname', {
-    type: 'string',
-    default: 'localhost'
-});
-const args = command.parse(process.argv);
-
 const container = new Container();
 container.load(serverModule);
 const server = container.get(CollaborationServer);
-server.startServer(args);
+
+const command = yargs.version('0.0.1').command<{
+    port: number,
+    hostname: string
+}>({
+    command: 'start',
+    describe: 'Start the server',
+    // Disable this command's `--help` option so that it is forwarded to Theia's CLI
+    builder: {
+        'port': {
+            type: 'number',
+            default: 8100
+        },
+        'hostname': {
+            type: 'string',
+            default: 'localhost'
+        }
+    },
+    handler: async args => {
+        server.startServer(args);
+    }
+});
+command.parse();

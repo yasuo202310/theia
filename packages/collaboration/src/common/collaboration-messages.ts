@@ -30,7 +30,6 @@ export namespace Messages {
         export const Left = new BroadcastType<[types.Peer]>('room/left');
         export const PermissionsUpdated = new BroadcastType<[types.Permissions]>('room/permissionsUpdated');
         export const Closed = new BroadcastType('room/closed');
-
     }
 
     export namespace Editor {
@@ -39,11 +38,14 @@ export namespace Messages {
         export const Grammar = new RequestType<[string], unknown>('editor/grammar');
     }
 
-    export namespace Workspace {
-        // eslint-disable-next-line @typescript-eslint/no-shadow
-        export const Entry = new RequestType<[string], types.WorkspaceEntry>('workspace/entry');
-        export const File = new RequestType<[string], string>('workspace/file');
+    export namespace FileSystem {
+        export const Stat = new RequestType<[string], types.FileSystemStat>('fileSystem/stat');
+        export const Mkdir = new RequestType<[string], undefined>('fileSystem/mkdir');
+        export const ReadFile = new RequestType<[string], string>('fileSystem/readFile');
+        export const WriteFile = new RequestType<[string, string], undefined>('fileSystem/writeFile');
+        export const ReadDir = new RequestType<[string], Record<string, types.FileType>>('fileSystem/readDir');
+        export const Delete = new RequestType<[string], undefined>('fileSystem/delete');
+        export const Rename = new RequestType<[string, string], undefined>('');
     }
 
 }
-

@@ -48,17 +48,28 @@ export interface EditorHandler {
     presence(): void;
 }
 
-export interface WorkspaceHandler {
-    onEntry(handler: Handler<[string], types.WorkspaceEntry>): void;
-    entry(path: string): Promise<types.WorkspaceEntry>;
-    onFile(handler: Handler<[string], string>): void;
-    file(path: string): Promise<string>;
+export interface FileSystemHandler {
+    onReadFile(handler: Handler<[string], string>): void;
+    readFile(uri: string): Promise<string>;
+    onWriteFile(handler: Handler<[string, string]>): void;
+    writeFile(uri: string, content: string): Promise<void>;
+    onStat(handler: Handler<[string], types.FileSystemStat>): void;
+    stat(uri: string): Promise<types.FileSystemStat>;
+    onMkdir(handler: Handler<[string]>): void;
+    mkdir(uri: string): Promise<void>;
+    onReaddir(handler: Handler<[string], types.FileSystemDirectory>): void;
+    readdir(uri: string): Promise<types.FileSystemDirectory>;
+    onDelete(handler: Handler<[string]>): void;
+    delete(uri: string): Promise<void>;
+    onRename(handler: Handler<[string, string]>): void;
+    rename(from: string, to: string): Promise<void>;
 }
 
 export interface CollaborationConnection extends BroadcastConnection {
     room: RoomHandler;
     peer: PeerHandler;
-    workspace: WorkspaceHandler;
+    fs: FileSystemHandler;
+    editor: EditorHandler;
 }
 
 export interface BroadcastConnection {
@@ -105,11 +116,28 @@ export class Connection implements CollaborationConnection {
         init: request => this.sendRequest(Messages.Peer.Init, request)
     };
 
-    workspace: WorkspaceHandler = {
-        onEntry: handler => this.onRequest(Messages.Workspace.Entry, handler),
-        entry: path => this.sendRequest(Messages.Workspace.Entry, path),
-        onFile: handler => this.onRequest(Messages.Workspace.File, handler),
-        file: path => this.sendRequest(Messages.Workspace.File, path)
+    fs: FileSystemHandler = {
+        onReadFile: handler => this.onRequest(Messages.FileSystem.ReadFile, handler),
+        readFile: uri => this.sendRequest(Messages.FileSystem.ReadFile, uri),
+        onWriteFile: handler => this.onRequest(Messages.FileSystem.WriteFile, handler),
+        writeFile: (uri, content) => this.sendRequest(Messages.FileSystem.WriteFile, uri, content),
+        onReaddir: handler => this.onRequest(Messages.FileSystem.ReadDir, handler),
+        readdir: uri => this.sendRequest(Messages.FileSystem.ReadDir, uri),
+        onStat: handler => this.onRequest(Messages.FileSystem.Stat, handler),
+        stat: uri => this.sendRequest(Messages.FileSystem.Stat, uri),
+        onMkdir: handler => this.onRequest(Messages.FileSystem.Mkdir, handler),
+        mkdir: uri => this.sendRequest(Messages.FileSystem.Mkdir, uri),
+        onDelete: handler => this.onRequest(Messages.FileSystem.Delete, handler),
+        delete: uri => this.sendRequest(Messages.FileSystem.Delete, uri),
+        onRename: handler => this.onRequest(Messages.FileSystem.Rename, handler),
+        rename: (from, to) => this.sendRequest(Messages.FileSystem.Rename, from, to)
+    };
+
+    editor: EditorHandler = {
+        onUpdate: handler => this.onBroadcast(Messages.Editor.Update, handler),
+        update: editorUpdate => this.sendBroadcast(Messages.Editor.Update, editorUpdate),
+        onPresence: handler => this.onBroadcast(Messages.Editor.Presence, handler),
+        presence: () => this.sendBroadcast(Messages.Editor.Presence)
     };
 
     constructor(readonly writer: ConnectionWriter, readonly reader: ConnectionReader) {
@@ -133,11 +161,19 @@ export class Connection implements CollaborationConnection {
                     console.error(`No handler registered for ${message.kind} method ${message.method}.`);
                     return;
                 }
-                const result = handler(...(message.params ?? []));
-                Promise.resolve(result).then(value => {
-                    const responseMessage = ResponseMessage.create(message.id, value);
-                    this.writer(responseMessage);
-                });
+                try {
+                    const result = handler(...(message.params ?? []));
+                    Promise.resolve(result).then(value => {
+                        const responseMessage = ResponseMessage.create(message.id, value);
+                        this.writer(responseMessage);
+                    }, error => {
+                        const responseErrorMessage = ResponseErrorMessage.create(message.id, error.message);
+                        this.writer(responseErrorMessage);
+                    });
+                } catch (error) {
+                    const responseErrorMessage = ResponseErrorMessage.create(message.id, error.message);
+                    this.writer(responseErrorMessage);
+                }
             } else if (BroadcastMessage.is(message) || NotificationMessage.is(message)) {
                 const handler = this.messageHandlers.get(message.method);
                 if (!handler) {

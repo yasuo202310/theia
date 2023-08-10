@@ -18,11 +18,14 @@ import { Command, CommandContribution, CommandRegistry, MessageService, QuickInp
 import { inject, injectable } from '@theia/core/shared/inversify';
 import { CollaborationAuthHandler, CollaborationConnection } from '../common/collaboration-connection';
 import { Messages } from '../common/collaboration-messages';
-import { InitResponse, Peer, WorkspaceChildEntry, WorkspaceEntry, WorkspaceEntryType } from '../common/collaboration-types';
+import * as types from '../common/collaboration-types';
 import { Deferred } from '@theia/core/lib/common/promise-util';
 import { WindowService } from '@theia/core/lib/browser/window/window-service';
 import { CollaborationWorkspaceService } from './collaboration-workspace-service';
-import { CollaborationFileService } from './collaboration-file-service';
+import { FileService } from '@theia/filesystem/lib/browser/file-service';
+import { CollaborationFileSystemProvider } from './collaboration-file-system-provider';
+import { MonacoTextModelService } from '@theia/monaco/lib/browser/monaco-text-model-service';
+import { MonacoEditorModel } from '@theia/monaco/lib/browser/monaco-editor-model';
 
 export const COLLABORATION_CATEGORY = 'Collaboration';
 
@@ -65,11 +68,16 @@ export class CollaborationFrontendContribution implements CommandContribution {
     @inject(CollaborationWorkspaceService)
     protected readonly workspaceService: CollaborationWorkspaceService;
 
-    @inject(CollaborationFileService)
-    protected readonly fileService: CollaborationFileService;
+    @inject(FileService)
+    protected readonly fileService: FileService;
 
-    protected identity = new Deferred<Peer>();
-    protected guests = new Map<string, Peer>();
+    @inject(MonacoTextModelService)
+    protected readonly monacoModelService: MonacoTextModelService;
+
+    protected identity = new Deferred<types.Peer>();
+    protected guests = new Map<string, types.Peer>();
+    protected isHost = false;
+    protected isUpdating = false;
 
     registerCommands(commands: CommandRegistry): void {
         commands.registerCommand(CollaborationCommands.CREATE_ROOM, {
@@ -81,6 +89,7 @@ export class CollaborationFrontendContribution implements CommandContribution {
                 const connection = this.collaborationService.connect();
                 this.registerConnection(connection);
                 navigator.clipboard.writeText(roomToken.room);
+                this.isHost = true;
             }
         });
         commands.registerCommand(CollaborationCommands.JOIN_ROOM, {
@@ -92,10 +101,10 @@ export class CollaborationFrontendContribution implements CommandContribution {
                 }
                 const connection = this.collaborationService.connect();
                 this.registerConnection(connection);
-                const workspace = await connection.peer.init({});
-                console.log('Workspace: ', workspace);
-                this.workspaceService.setHostWorkspace(workspace.workspace, connection);
-                this.fileService.setConnection(connection);
+                const init = await connection.peer.init({});
+                console.log('Init: ', init);
+                this.fileService.registerProvider('collaboration', new CollaborationFileSystemProvider(connection));
+                this.workspaceService.setHostWorkspace(init.workspace, connection);
             }
         });
     }
@@ -128,33 +137,127 @@ export class CollaborationFrontendContribution implements CommandContribution {
         });
         connection.peer.onInit(async () => {
             const roots = await this.workspaceService.roots;
-            const resolvedRoots = await Promise.all(roots.map(root => this.resolveStat(root.resource)));
-            const response: InitResponse = {
+            const response: types.InitResponse = {
                 host: await this.identity.promise,
                 guests: Array.from(this.guests.values()),
                 capabilities: {},
                 permissions: {},
-                workspace: resolvedRoots
+                workspace: {
+                    name: this.workspaceService.workspace?.name ?? 'Collaboration',
+                    folders: roots.map(e => e.name)
+                }
             };
             return response;
         });
-        connection.workspace.onEntry(async path => {
-            const uri = this.getPathUri(path);
+        connection.editor.onUpdate((_, update) => {
+            const uri = this.getPathUri(update.uri);
             if (uri) {
-                return this.resolveStat(uri);
-            } else {
-                throw new Error('Could not resolve path');
+                const model = this.monacoModelService.models.find(e => e.uri === uri.toString());
+                if (model) {
+                    this.isUpdating = true;
+                    model.textEditorModel.applyEdits(update.content.map(content => ({
+                        range: {
+                            startLineNumber: content.range!.start.line + 1,
+                            startColumn: content.range!.start.character + 1,
+                            endLineNumber: content.range!.end.line + 1,
+                            endColumn: content.range!.end.character + 1
+                        },
+                        text: content.text
+                    })));
+                    this.isUpdating = false;
+                }
             }
         });
-        connection.workspace.onFile(async path => {
+        for (const model of this.monacoModelService.models) {
+            this.registerModelUpdate(connection, model);
+        }
+        this.monacoModelService.onDidCreate(newModel => {
+            this.registerModelUpdate(connection, newModel);
+        });
+        connection.fs.onReadFile(async path => {
             const uri = this.getPathUri(path);
             if (uri) {
                 const content = await this.fileService.readFile(uri);
                 return content.value.toString();
             } else {
-                throw new Error();
+                throw new Error('Could not read file: ' + path);
             }
         });
+        connection.fs.onReaddir(async path => {
+            const uri = this.getPathUri(path);
+            if (uri) {
+                const resolved = await this.fileService.resolve(uri);
+                if (resolved.children) {
+                    const dir: Record<string, types.FileType> = {};
+                    for (const child of resolved.children) {
+                        dir[child.name] = child.isDirectory ? types.FileType.Directory : types.FileType.File;
+                    }
+                    return dir;
+                } else {
+                    return {};
+                }
+            } else {
+                throw new Error('Could not read directory: ' + path);
+            }
+        });
+        connection.fs.onStat(async path => {
+            const uri = this.getPathUri(path);
+            if (uri) {
+                const content = await this.fileService.resolve(uri, {
+                    resolveMetadata: true
+                });
+                return {
+                    type: content.isDirectory ? types.FileType.Directory : types.FileType.File,
+                    ctime: content.ctime,
+                    mtime: content.mtime,
+                    size: content.size,
+                    permissions: content.isReadonly ? types.FilePermission.Readonly : undefined
+                };
+            } else {
+                throw new Error('Could not stat entry: ' + path);
+            }
+        });
+    }
+
+    protected registerModelUpdate(connection: CollaborationConnection, model: MonacoEditorModel): void {
+        model.onDidChangeContent(e => {
+            if (this.isUpdating) {
+                return;
+            }
+            const path = this.getPath(new URI(model.uri));
+            if (!path) {
+                return;
+            }
+            const content: types.EditorContentUpdate[] = [];
+            for (const change of e.contentChanges) {
+                if ('range' in change) {
+                    content.push({
+                        range: change.range,
+                        text: change.text
+                    });
+                } else {
+                    content.push({
+                        text: change.text
+                    });
+                }
+            }
+            connection.editor.update({
+                uri: path,
+                content
+            });
+        });
+    }
+
+    protected getPath(uri: URI): string | undefined {
+        const path = uri.path.toString();
+        const roots = this.workspaceService.tryGetRoots();
+        for (const root of roots) {
+            const rootUri = root.resource.path.toString() + '/';
+            if (path.startsWith(rootUri)) {
+                return root.name + '/' + path.substring(rootUri.length);
+            }
+        }
+        return undefined;
     }
 
     protected getPathUri(path: string): URI | undefined {
@@ -170,36 +273,4 @@ export class CollaborationFrontendContribution implements CommandContribution {
             return undefined;
         }
     }
-
-    protected async resolveStat(uri: URI): Promise<WorkspaceEntry> {
-        const fileStat = await this.fileService.resolve(uri);
-        const children: WorkspaceChildEntry[] = fileStat.children?.map(e => ({
-            name: e.name,
-            type: e.isFile ? WorkspaceEntryType.FILE : WorkspaceEntryType.DIRECTORY
-        })) ?? [];
-        return {
-            name: fileStat.name,
-            ctime: fileStat.ctime ?? 0,
-            mtime: fileStat.mtime ?? 0,
-            size: fileStat.size ?? 0,
-            type: fileStat.isFile ? WorkspaceEntryType.FILE : WorkspaceEntryType.DIRECTORY,
-            children
-        };
-    }
-
-//     protected async resolveStat(stat: FileStat): Promise<WorkspaceEntry> {
-//
-//     }
-
-    // protected async workspaceEntryFromStat(stat: FileStat): Promise<WorkspaceEntry | undefined> {
-    //     const fileStat = await this.fileService.resolve(stat.resource);
-    //     if (stat.isDirectory && stat.children) {
-    //         const entry: WorkspaceEntry = {};
-    //         for (const child of stat.children) {
-    //             entry[child.name] = this.workspaceEntryFromStat(child);
-    //         }
-    //         return entry;
-    //     }
-    //     return undefined;
-    // }
 }

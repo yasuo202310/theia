@@ -16,17 +16,13 @@
 
 import { CommandContribution } from '@theia/core';
 import { ContainerModule } from '@theia/core/shared/inversify';
-import { FileService } from '@theia/filesystem/lib/browser/file-service';
 import { WorkspaceService } from '@theia/workspace/lib/browser';
-import { CollaborationFileService } from './collaboration-file-service';
 import { CollaborationFrontendContribution } from './collaboration-frontend-contribution';
 import { CollaborationWorkspaceService } from './collaboration-workspace-service';
 
 export default new ContainerModule((bind, _, __, rebind) => {
     bind(CollaborationWorkspaceService).toSelf().inSingletonScope();
-    bind(CollaborationFileService).toSelf().inSingletonScope();
     rebind(WorkspaceService).toService(CollaborationWorkspaceService);
-    rebind(FileService).toService(CollaborationFileService);
     bind(CollaborationFrontendContribution).toSelf().inSingletonScope();
     bind(CommandContribution).toService(CollaborationFrontendContribution);
 });

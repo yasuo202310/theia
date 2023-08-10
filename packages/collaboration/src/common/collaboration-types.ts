@@ -33,7 +33,12 @@ export interface InitResponse {
     guests: Peer[];
     permissions: Permissions;
     capabilities: Capabilities;
-    workspace: WorkspaceEntry[]
+    workspace: Workspace
+}
+
+export interface Workspace {
+    name: string
+    folders: string[]
 }
 
 export interface Capabilities {
@@ -49,48 +54,39 @@ export interface Room {
 
 export type Permissions = Record<string, string>;
 
-export interface WorkspaceEntry {
-    name: string;
-    type: WorkspaceEntryType;
-    /**
-     * The size of the file.
-     *
-     * The value may or may not be resolved as
-     * it is optional.
-     */
-    size: number;
-
-    /**
-     * The last modification date represented as millis from unix epoch.
-     *
-     * The value may or may not be resolved as
-     * it is optional.
-     */
+export interface FileSystemStat {
+    type: FileType;
     mtime: number;
-
-    /**
-     * The creation date represented as millis from unix epoch.
-     *
-     * The value may or may not be resolved as
-     * it is optional.
-     */
     ctime: number;
-    children: WorkspaceChildEntry[]
+    size: number;
+    permissions?: FilePermission;
 }
 
-export interface WorkspaceChildEntry {
-    name: string;
-    type: WorkspaceEntryType;
+export interface FileSystemDirectory {
+    [name: string]: FileType
 }
 
-export enum WorkspaceEntryType {
-    FILE = 0,
-    DIRECTORY = 1
+export enum FilePermission {
+    /**
+     * File is readonly.
+     */
+    Readonly = 1
+}
+
+export enum FileType {
+    Unknown = 0,
+    File = 1,
+    Directory = 2,
+    SymbolicLink = 64
 }
 
 export interface EditorUpdate {
     uri: string
-    range: EditorRange
+    content: EditorContentUpdate[]
+}
+
+export interface EditorContentUpdate {
+    range?: EditorRange
     text: string
 }
 
@@ -101,5 +97,5 @@ export interface EditorRange {
 
 export interface EditorPosition {
     line: number
-    column: number
+    character: number
 }

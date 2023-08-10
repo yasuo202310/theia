@@ -54,6 +54,7 @@ export class SocketIoChannel implements Channel {
     }
 
     close(): void {
+        this.onDidCloseEmitter.dispose();
         this._socket.disconnect(true);
     }
 }

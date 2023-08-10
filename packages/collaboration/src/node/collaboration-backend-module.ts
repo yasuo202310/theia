@@ -14,12 +14,8 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-// import { Peer, PeerInfo } from './types';
+import { ContainerModule } from '@theia/core/shared/inversify';
 
-export class PeerManager {
-//
-//     registerPeer(info: PeerInfo): Peer {
-//
-//     }
+export default new ContainerModule(bind => {
 
-}
+});

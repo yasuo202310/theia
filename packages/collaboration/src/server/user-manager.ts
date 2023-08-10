@@ -15,25 +15,22 @@
 // *****************************************************************************
 
 import { injectable } from '@theia/core/shared/inversify';
-import { v4 } from 'uuid';
+import { nanoid } from 'nanoid';
 import { User } from './types';
 
 @injectable()
 export class UserManager {
 
-    protected users = new Map<string, User>();
-
     async registerUser(user: Omit<User, 'id'>): Promise<User> {
         const registeredUser: User = {
             ...user,
-            id: v4()
+            id: nanoid(24)
         };
-        this.users.set(registeredUser.id, registeredUser);
         return registeredUser;
     }
 
     async getUser(id: string): Promise<User | undefined> {
-        return this.users.get(id);
+        return undefined;
     }
 
 }

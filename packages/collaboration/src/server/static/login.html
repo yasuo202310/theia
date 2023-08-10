@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script>
+        function login() {
+            const token = new URLSearchParams(location.search).get('token');
+            const user = document.getElementById('user').value;
+            const email = document.getElementById('email').value;
+            fetch('/api/login/simple', {
+                method: 'POST',
+                body: JSON.stringify({ user, email, token }),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <input id="user">
+    <input id="email">
+    <button onclick="login()">Login</button>
+</body>
+
+</html>

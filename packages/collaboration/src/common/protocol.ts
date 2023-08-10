@@ -34,6 +34,24 @@ export namespace Message {
     }
 }
 
+export interface ErrorMessage extends Message {
+    kind: 'error';
+    message: string;
+}
+
+export namespace ErrorMessage {
+    export function create(message: string): ErrorMessage {
+        return {
+            version: VERSION,
+            kind: 'error',
+            message
+        };
+    }
+    export function is(message: unknown): message is ErrorMessage {
+        return Message.is(message) && message.kind === 'error';
+    }
+}
+
 /**
  * Request message
  */
@@ -92,6 +110,35 @@ export namespace ResponseMessage {
     }
     export function is(message: unknown): message is ResponseMessage {
         return Message.is(message) && message.kind === 'response';
+    }
+}
+
+export interface ResponseErrorMessage extends Message {
+    /**
+     * The original request id.
+     */
+    id: number | string;
+    kind: 'response-error';
+    message: string;
+}
+
+export namespace ResponseErrorMessage {
+    export function create(id: number | string, message: string): ResponseErrorMessage {
+        return {
+            kind: 'response-error',
+            version: VERSION,
+            id,
+            message
+        };
+    }
+    export function is(message: unknown): message is ResponseErrorMessage {
+        return Message.is(message) && message.kind === 'response-error';
+    }
+}
+
+export class ResponseError {
+    constructor(readonly message: string) {
+
     }
 }
 

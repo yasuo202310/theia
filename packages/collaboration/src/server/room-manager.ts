@@ -15,70 +15,101 @@
 // *****************************************************************************
 
 import { inject, injectable } from '@theia/core/shared/inversify';
-import { v4 } from 'uuid';
-import { PeerJoined, RoomClosed, RoomJoin } from '../common/collaboration-messages';
-import { BroadcastMessage, RequestMessage } from '../common/protocol';
+import { Messages } from '../common/collaboration-messages';
+import { BroadcastMessage, NotificationMessage, RequestMessage } from '../common/protocol';
+import { CredentialsManager } from './credentials-manager';
 import { MessageRelay } from './message-relay';
-import { Peer, Permissions, Room, User } from './types';
+import { Peer, Room, User } from './types';
+
+export interface PreparedRoom {
+    id: string
+    jwt: string;
+}
+
+export interface RoomClaim {
+    room: string
+    user: User
+    host?: boolean
+}
 
 @injectable()
 export class RoomManager {
 
     protected rooms = new Map<string, Room>();
     protected peers = new Map<string, Room>();
-    protected preparedRooms = new Map<string, string>();
-    protected requestedJoins = new Map<string, string>();
 
     @inject(MessageRelay)
     private readonly messageRelay: MessageRelay;
 
+    @inject(CredentialsManager)
+    protected readonly credentials: CredentialsManager;
+
     closeRoom(id: string): void {
         const room = this.rooms.get(id);
         if (room) {
-            this.messageRelay.sendBroadcast(room.host, BroadcastMessage.create(RoomClosed, room.host.id));
+            this.messageRelay.sendBroadcast(room.host, BroadcastMessage.create(Messages.Room.Closed, room.host.id));
             for (const peer of room.peers) {
                 this.peers.delete(peer.id);
+                peer.channel.close();
             }
             this.rooms.delete(id);
         }
     }
 
-    async prepareRoom(user: User): Promise<string> {
-        const secret = v4();
-        this.preparedRooms.set(user.id, secret);
-        return secret;
+    async prepareRoom(user: User): Promise<PreparedRoom> {
+        const id = this.credentials.secureId();
+        const claim: RoomClaim = { room: id, user: { ...user }, host: true };
+        const jwt = await this.credentials.generateJwt(claim);
+        return {
+            id,
+            jwt
+        };
     }
 
-    async join(peer: Peer, id: string, secret: string): Promise<Room> {
-        const hostSecret = this.preparedRooms.get(peer.user.id);
-        if (!hostSecret) {
-            const userSecret = this.requestedJoins.get(peer.user.id);
-            if (userSecret !== secret) {
-                throw new Error('Incorrect user secret provided');
-            }
-            this.requestedJoins.delete(peer.user.id);
-            const room = this.rooms.get(id);
-            if (!room) {
-                throw new Error('Could not find room to join');
-            }
-            this.peers.set(peer.id, room);
-            room.guests.push(peer);
-            this.messageRelay.sendBroadcast(peer, BroadcastMessage.create(PeerJoined, peer.id, [peer.toProtocol()]));
-            return room;
-        } else {
-            if (hostSecret !== secret) {
-                throw new Error('Room is not prepared');
-            }
-            this.preparedRooms.delete(peer.user.id);
-            const room = new RoomImpl(id, peer, {});
+    async join(peer: Peer, roomId: string, host: boolean): Promise<Room> {
+        let room: Room;
+        if (host) {
+            room = new RoomImpl(roomId, peer);
             this.rooms.set(room.id, room);
             this.peers.set(peer.id, room);
             console.log('Created room with id', room.id);
             peer.channel.onClose(() => {
                 this.closeRoom(room.id);
             });
-            return room;
+        } else {
+            room = this.rooms.get(roomId)!;
+            if (!room) {
+                throw new Error('Could not find room to join');
+            }
+            this.peers.set(peer.id, room);
+            room.guests.push(peer);
+            this.messageRelay.sendBroadcast(
+                peer,
+                BroadcastMessage.create(
+                    Messages.Room.Joined,
+                    peer.id,
+                    [peer.toProtocol()]
+                )
+            );
+            peer.channel.onClose(() => {
+                this.messageRelay.sendBroadcast(
+                    peer,
+                    BroadcastMessage.create(
+                        Messages.Room.Left,
+                        peer.id,
+                        [peer.toProtocol()]
+                    )
+                );
+            });
         }
+        this.messageRelay.sendNotification(
+            peer,
+            NotificationMessage.create(
+                Messages.Peer.Info,
+                [peer.toProtocol()]
+            )
+        );
+        return room;
     }
 
     getRoomById(id: string): Room | undefined {
@@ -90,16 +121,22 @@ export class RoomManager {
     }
 
     async requestJoin(room: Room, user: User): Promise<string> {
-        const response = await this.messageRelay.sendRequest(
-            room.host,
-            RequestMessage.create(RoomJoin, v4(), [user])
-        ) as boolean;
-        if (response) {
-            const secret = v4();
-            this.requestedJoins.set(user.id, secret);
-            return secret;
-        } else {
-            throw new Error();
+        try {
+            const response = await this.messageRelay.sendRequest(
+                room.host,
+                RequestMessage.create(Messages.Peer.Join, this.credentials.secureId(), [user])
+            ) as boolean;
+            if (response) {
+                const claim: RoomClaim = {
+                    room: room.id,
+                    user: { ...user }
+                };
+                return this.credentials.generateJwt(claim);
+            } else {
+                throw new Error('Join request has been rejected');
+            }
+        } catch {
+            throw new Error('Join request has timed out');
         }
     }
 
@@ -109,16 +146,14 @@ export class RoomImpl implements Room {
     id: string;
     host: Peer;
     guests: Peer[];
-    permissions: Permissions;
 
     get peers(): Peer[] {
         return [this.host, ...this.guests];
     }
 
-    constructor(id: string, host: Peer, permissions: Permissions) {
+    constructor(id: string, host: Peer) {
         this.id = id;
         this.host = host;
-        this.permissions = permissions;
         this.guests = [];
     }
 }

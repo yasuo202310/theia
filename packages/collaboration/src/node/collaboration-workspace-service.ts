@@ -14,35 +14,5 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { Channel } from './channel';
-import * as protocol from '../common/collaboration-types';
-
-export interface Room {
-    id: string;
-    host: Peer;
-    guests: Peer[];
-    readonly peers: readonly Peer[];
+export class CollaborationWorkspaceService {
 }
-
-export interface User {
-    id: string;
-    name: string;
-    email?: string;
-}
-
-export const PeerInfo = Symbol('PeerInfo');
-
-export interface PeerInfo {
-    user: User;
-    channel: Channel;
-}
-
-export interface Peer {
-    id: string;
-    user: User;
-    channel: Channel;
-    room: Room;
-    toProtocol(): protocol.Peer
-}
-
-export type Permissions = Record<string, string>;

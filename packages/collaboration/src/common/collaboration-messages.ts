@@ -14,12 +14,36 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { Peer, Permissions } from './collaboration-types';
-import { BroadcastType, RequestType } from './protocol';
+import * as types from './collaboration-types';
+import { BroadcastType, RequestType, NotificationType } from './protocol';
 
-export const PeerJoined = new BroadcastType<[Peer]>('peerJoined');
-export const PeerLeft = new BroadcastType<[Peer]>('peerLeft');
-export const UpdatePermissions = new BroadcastType<[Permissions]>('updatePermissions');
+export namespace Messages {
 
-export const RoomClosed = new BroadcastType('roomClosed');
-export const RoomJoin = new RequestType<[Peer], boolean>('roomJoin');
+    export namespace Peer {
+        export const Join = new RequestType<[types.User], boolean>('peer/join');
+        export const Info = new NotificationType<[types.Peer]>('peer/info');
+        export const Init = new RequestType<[types.InitRequest], types.InitResponse>('peer/init');
+    }
+
+    export namespace Room {
+        export const Joined = new BroadcastType<[types.Peer]>('room/joined');
+        export const Left = new BroadcastType<[types.Peer]>('room/left');
+        export const PermissionsUpdated = new BroadcastType<[types.Permissions]>('room/permissionsUpdated');
+        export const Closed = new BroadcastType('room/closed');
+
+    }
+
+    export namespace Editor {
+        export const Update = new BroadcastType<[types.EditorUpdate]>('editor/update');
+        export const Presence = new BroadcastType<[]>('editor/presence');
+        export const Grammar = new RequestType<[string], unknown>('editor/grammar');
+    }
+
+    export namespace Workspace {
+        // eslint-disable-next-line @typescript-eslint/no-shadow
+        export const Entry = new RequestType<[string], types.WorkspaceEntry>('workspace/entry');
+        export const File = new RequestType<[string], string>('workspace/file');
+    }
+
+}
+

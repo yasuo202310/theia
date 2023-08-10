@@ -16,9 +16,9 @@
 
 import { injectable } from '@theia/core/shared/inversify';
 import { Deferred } from '@theia/core/lib/common/promise-util';
-import { v4 } from 'uuid';
-import { BroadcastMessage, NotificationMessage, RequestMessage, ResponseMessage } from '../common/protocol';
+import { BroadcastMessage, NotificationMessage, RequestMessage, ResponseErrorMessage, ResponseMessage } from '../common/protocol';
 import { Peer } from './types';
+import { nanoid } from 'nanoid';
 
 export interface RelayedRequest {
     id: string | number;
@@ -31,10 +31,14 @@ export class MessageRelay {
 
     protected requestMap = new Map<string, RelayedRequest>();
 
-    pushResponse(receiver: Peer, message: ResponseMessage): void {
+    pushResponse(receiver: Peer, message: ResponseMessage | ResponseErrorMessage): void {
         const relayedRequest = this.requestMap.get(message.id.toString());
         if (relayedRequest) {
-            relayedRequest.response.resolve(message.response);
+            if (ResponseMessage.is(message)) {
+                relayedRequest.response.resolve(message.response);
+            } else {
+                relayedRequest.response.reject(new Error(message.message));
+            }
             relayedRequest.dispose();
         }
     }
@@ -42,13 +46,17 @@ export class MessageRelay {
     sendRequest(target: Peer, message: RequestMessage): Promise<unknown> {
         const deferred = new Deferred<unknown>();
         const messageId = message.id;
-        const key = v4();
+        const key = nanoid(24);
+        const dispose = () => {
+            this.requestMap.delete(key);
+            clearTimeout(timeout);
+            deferred.reject(new Error('Request timed out'));
+        };
+        const timeout = setTimeout(dispose, 300_000);
         this.requestMap.set(key, {
             id: messageId,
             response: deferred,
-            dispose: () => {
-                this.requestMap.delete(key);
-            }
+            dispose
         });
         const targetMessage: RequestMessage = {
             ...message,

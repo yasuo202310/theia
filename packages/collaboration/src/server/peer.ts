@@ -15,9 +15,9 @@
 // *****************************************************************************
 
 import { inject, injectable, postConstruct } from '@theia/core/shared/inversify';
-import { v4 } from 'uuid';
+import { nanoid } from 'nanoid';
 import * as protocol from '../common/collaboration-types';
-import { BroadcastMessage, Message, NotificationMessage, RequestMessage, ResponseMessage } from '../common/protocol';
+import { BroadcastMessage, Message, NotificationMessage, RequestMessage, ResponseErrorMessage, ResponseMessage } from '../common/protocol';
 import { Channel } from './channel';
 import { MessageRelay } from './message-relay';
 import { RoomManager } from './room-manager';
@@ -29,7 +29,7 @@ export type PeerFactory = (info: PeerInfo) => Peer;
 @injectable()
 export class PeerImpl implements Peer {
 
-    readonly id = v4();
+    readonly id = nanoid(24);
 
     get user(): User {
         return this.peerInfo.user;
@@ -42,7 +42,7 @@ export class PeerImpl implements Peer {
     get room(): Room {
         const value = this.roomManager.getRoomByPeerId(this.id);
         if (!value) {
-            throw new Error();
+            throw new Error("This peer doesn't belong to any room");
         }
         return value;
     }
@@ -62,17 +62,22 @@ export class PeerImpl implements Peer {
     }
 
     private async receiveMessage(message: Message): Promise<void> {
-        if (ResponseMessage.is(message)) {
+        if (ResponseMessage.is(message) || ResponseErrorMessage.is(message)) {
             this.messageRelay.pushResponse(this, message);
         } else if (RequestMessage.is(message)) {
-            const response = await this.messageRelay.sendRequest(this.room.host, message);
-            const responseMessage: ResponseMessage = {
-                id: message.id,
-                version: message.version,
-                kind: 'response',
-                response
-            };
-            this.channel.sendMessage(responseMessage);
+            try {
+                const response = await this.messageRelay.sendRequest(this.room.host, message);
+                const responseMessage: ResponseMessage = {
+                    id: message.id,
+                    version: message.version,
+                    kind: 'response',
+                    response
+                };
+                this.channel.sendMessage(responseMessage);
+            } catch (err) {
+                const errorResponseMessage = ResponseErrorMessage.create(message.id, err.message);
+                this.channel.sendMessage(errorResponseMessage);
+            }
         } else if (NotificationMessage.is(message)) {
             this.messageRelay.sendNotification(this.room.host, message);
         } else if (BroadcastMessage.is(message)) {
@@ -83,7 +88,7 @@ export class PeerImpl implements Peer {
     toProtocol(): protocol.Peer {
         return {
             id: this.id,
-            name: this.user.id,
+            name: this.user.name,
             email: this.user.email
         };
     }

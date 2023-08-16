@@ -81,12 +81,12 @@ export enum FileType {
 }
 
 export interface EditorUpdate {
-    uri: string
+    path: string
     content: EditorContentUpdate[]
 }
 
 export interface EditorContentUpdate {
-    range?: EditorRange
+    range: EditorRange
     text: string
 }
 
@@ -98,4 +98,9 @@ export interface EditorRange {
 export interface EditorPosition {
     line: number
     character: number
+}
+
+export interface EditorPresence {
+    path: string
+    selection: EditorRange[]
 }

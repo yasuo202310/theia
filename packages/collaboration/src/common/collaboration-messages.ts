@@ -34,7 +34,7 @@ export namespace Messages {
 
     export namespace Editor {
         export const Update = new BroadcastType<[types.EditorUpdate]>('editor/update');
-        export const Presence = new BroadcastType<[]>('editor/presence');
+        export const Presence = new BroadcastType<[types.EditorPresence]>('editor/presence');
         export const Grammar = new RequestType<[string], unknown>('editor/grammar');
     }
 

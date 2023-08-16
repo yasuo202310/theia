@@ -44,8 +44,8 @@ export interface PeerHandler {
 export interface EditorHandler {
     onUpdate(handler: BroadcastHandler<[types.EditorUpdate]>): void;
     update(update: types.EditorUpdate): void;
-    onPresence(handler: BroadcastHandler<[]>): void;
-    presence(): void;
+    onPresence(handler: BroadcastHandler<[types.EditorPresence]>): void;
+    presence(presense: types.EditorPresence): void;
 }
 
 export interface FileSystemHandler {
@@ -137,7 +137,7 @@ export class Connection implements CollaborationConnection {
         onUpdate: handler => this.onBroadcast(Messages.Editor.Update, handler),
         update: editorUpdate => this.sendBroadcast(Messages.Editor.Update, editorUpdate),
         onPresence: handler => this.onBroadcast(Messages.Editor.Presence, handler),
-        presence: () => this.sendBroadcast(Messages.Editor.Presence)
+        presence: presenceUpdate => this.sendBroadcast(Messages.Editor.Presence, presenceUpdate)
     };
 
     constructor(readonly writer: ConnectionWriter, readonly reader: ConnectionReader) {

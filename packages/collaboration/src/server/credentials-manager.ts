@@ -83,7 +83,7 @@ export class CredentialsManager {
     }
 
     protected async getJwtPrivateKey(): Promise<Uint8Array> {
-        const key = process.env.JWT_PRIVATE_KEY ?? (this.cachedKey ??= this.secureId());
+        const key = process.env.JWT_PRIVATE_KEY ?? __filename;
         return Buffer.from(key);
     }
 

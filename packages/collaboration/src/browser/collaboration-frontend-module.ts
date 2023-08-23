@@ -17,7 +17,9 @@
 import { CommandContribution } from '@theia/core';
 import { ContainerModule } from '@theia/core/shared/inversify';
 import { WorkspaceService } from '@theia/workspace/lib/browser';
+import { CollaborationColorService } from './collaboration-color-service';
 import { CollaborationFrontendContribution } from './collaboration-frontend-contribution';
+import { CollaborationInstance, CollaborationInstanceFactory, CollaborationInstanceOptions, createCollaborationInstanceContainer } from './collaboration-instance';
 import { CollaborationWorkspaceService } from './collaboration-workspace-service';
 
 export default new ContainerModule((bind, _, __, rebind) => {
@@ -25,4 +27,9 @@ export default new ContainerModule((bind, _, __, rebind) => {
     rebind(WorkspaceService).toService(CollaborationWorkspaceService);
     bind(CollaborationFrontendContribution).toSelf().inSingletonScope();
     bind(CommandContribution).toService(CollaborationFrontendContribution);
+    bind(CollaborationInstanceFactory).toFactory(context => (options: CollaborationInstanceOptions) => {
+        const container = createCollaborationInstanceContainer(context.container, options);
+        return container.get(CollaborationInstance);
+    });
+    bind(CollaborationColorService).toSelf().inSingletonScope();
 });

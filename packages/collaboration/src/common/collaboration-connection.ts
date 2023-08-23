@@ -80,6 +80,8 @@ export interface BroadcastConnection {
     sendRequest<P extends unknown[], R>(type: RequestType<P, R>, ...parameters: P): Promise<R>;
     sendNotification<P extends unknown[]>(type: NotificationType<P>, ...parameters: P): void;
     sendBroadcast<P extends unknown[]>(type: BroadcastType<P>, ...parameters: P): void;
+    dispose(): void;
+    onClose: Event<void>;
 }
 
 export type ConnectionWriter = (data: unknown) => void;
@@ -95,9 +97,14 @@ export class Connection implements CollaborationConnection {
 
     protected messageHandlers = new Map<string, Function>();
     protected onErrorEmitter = new Emitter<string>();
+    protected onCloseEmitter = new Emitter<void>();
 
     get onError(): Event<string> {
         return this.onErrorEmitter.event;
+    }
+
+    get onClose(): Event<void> {
+        return this.onCloseEmitter.event;
     }
 
     protected requestMap = new Map<string | number, RelayedRequest>();
@@ -140,8 +147,16 @@ export class Connection implements CollaborationConnection {
         presence: presenceUpdate => this.sendBroadcast(Messages.Editor.Presence, presenceUpdate)
     };
 
-    constructor(readonly writer: ConnectionWriter, readonly reader: ConnectionReader) {
+    constructor(readonly writer: ConnectionWriter, readonly reader: ConnectionReader, protected readonly _dispose?: () => void) {
         reader(data => this.handleMessage(data));
+    }
+
+    dispose(): void {
+        this.onCloseEmitter.fire();
+        this.onCloseEmitter.dispose();
+        this.onErrorEmitter.dispose();
+        this.messageHandlers.clear();
+        this._dispose?.();
     }
 
     protected handleMessage(message: unknown): void {
@@ -330,9 +345,13 @@ export class CollaborationAuthHandler {
         });
         const connection = new Connection(
             data => socket.emit('message', data),
-            cb => socket.on('message', cb)
+            cb => socket.on('message', cb),
+            () => socket.close()
         );
         socket.connect();
+        socket.on('disconnect', () => {
+            connection.dispose();
+        });
         return connection;
     }
 }

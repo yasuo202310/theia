@@ -102,5 +102,15 @@ export interface EditorPosition {
 
 export interface EditorPresence {
     path: string
-    selection: EditorRange[]
+    selection: EditorSelection[]
+}
+
+export interface EditorSelection {
+    direction: EditorSelectionDirection
+    range: EditorRange
+}
+
+export enum EditorSelectionDirection {
+    Forward = 0,
+    Backward = 1
 }

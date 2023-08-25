@@ -26,9 +26,11 @@ export interface Peer {
 }
 
 export interface InitRequest {
+    protocol: string;
 }
 
 export interface InitResponse {
+    protocol: string;
     host: Peer;
     guests: Peer[];
     permissions: Permissions;
@@ -52,7 +54,10 @@ export interface Room {
     permissions: Permissions
 }
 
-export type Permissions = Record<string, string>;
+export interface Permissions {
+    readonly: boolean;
+    [key: string]: string | boolean;
+};
 
 export interface FileSystemStat {
     type: FileType;

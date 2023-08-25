@@ -27,6 +27,24 @@ export class CollaborationFileSystemProvider implements FileSystemProviderWithFi
 
     capabilities = FileSystemProviderCapabilities.FileReadWrite;
 
+    protected _readonly: boolean;
+
+    get readonly(): boolean {
+        return this._readonly;
+    }
+
+    set readonly(value: boolean) {
+        if (this._readonly !== value) {
+            this._readonly = value;
+            if (value) {
+                this.capabilities |= FileSystemProviderCapabilities.Readonly;
+            } else {
+                this.capabilities &= ~FileSystemProviderCapabilities.Readonly;
+            }
+            this.onDidChangeCapabilitiesEmitter.fire();
+        }
+    }
+
     constructor(readonly connection: CollaborationConnection) {
     }
 

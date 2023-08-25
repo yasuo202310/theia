@@ -32,6 +32,8 @@ export interface RoomHandler {
     onJoin(handler: BroadcastHandler<[types.Peer]>): void;
     onLeave(handler: BroadcastHandler<[types.Peer]>): void;
     onClose(handler: BroadcastHandler<[]>): void;
+    onPermissions(handler: BroadcastHandler<[types.Permissions]>): void;
+    updatePermissions(permissions: types.Permissions): void;
 }
 
 export interface PeerHandler {
@@ -87,6 +89,8 @@ export interface BroadcastConnection {
 export type ConnectionWriter = (data: unknown) => void;
 export type ConnectionReader = (cb: (data: unknown) => void) => void;
 
+export const PROTOCOL_VERSION = '0.1.0';
+
 export interface RelayedRequest {
     id: string | number;
     response: Deferred<unknown>
@@ -113,7 +117,9 @@ export class Connection implements CollaborationConnection {
     room: RoomHandler = {
         onJoin: handler => this.onBroadcast(Messages.Room.Joined, handler),
         onLeave: handler => this.onBroadcast(Messages.Room.Left, handler),
-        onClose: handler => this.onBroadcast(Messages.Room.Closed, handler)
+        onClose: handler => this.onBroadcast(Messages.Room.Closed, handler),
+        onPermissions: handler => this.onBroadcast(Messages.Room.PermissionsUpdated, handler),
+        updatePermissions: permissions => this.sendBroadcast(Messages.Room.PermissionsUpdated, permissions)
     };
 
     peer: PeerHandler = {

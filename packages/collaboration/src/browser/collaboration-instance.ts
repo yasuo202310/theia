@@ -14,15 +14,14 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { Disposable, DisposableCollection, MessageService, URI } from '@theia/core';
+import { Disposable, DisposableCollection, Emitter, Event, MessageService, URI } from '@theia/core';
 import { Container, inject, injectable, interfaces, postConstruct } from '@theia/core/shared/inversify';
 import { ApplicationShell } from '@theia/core/lib/browser/shell/application-shell';
 import { EditorManager } from '@theia/editor/lib/browser/editor-manager';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
 import { MonacoTextModelService } from '@theia/monaco/lib/browser/monaco-text-model-service';
-import { CollaborationConnection } from '../common/collaboration-connection';
+import { CollaborationConnection, PROTOCOL_VERSION } from '../common/collaboration-connection';
 import { CollaborationWorkspaceService } from './collaboration-workspace-service';
-import { Messages } from '../common/collaboration-messages';
 import { Range as MonacoRange } from '@theia/monaco-editor-core';
 import { MonacoEditorModel } from '@theia/monaco/lib/browser/monaco-editor-model';
 import { Deferred } from '@theia/core/lib/common/promise-util';
@@ -108,17 +107,47 @@ export class CollaborationInstance implements Disposable {
     protected yjs = new Y.Doc();
     protected colorIndex = 0;
     protected editorDecorations = new Map<EditorWidget, string[]>();
+    protected fileSystem?: CollaborationFileSystemProvider;
+    protected permissions: types.Permissions = {
+        readonly: false
+    };
+
+    protected onDidCloseEmitter = new Emitter<void>();
+
+    get onDidClose(): Event<void> {
+        return this.onDidCloseEmitter.event;
+    }
 
     protected toDispose = new DisposableCollection();
+    protected _readonly = false;
+
+    get readonly(): boolean {
+        return this._readonly;
+    }
+
+    set readonly(value: boolean) {
+        if (value !== this.readonly) {
+            if (this.options.role === 'guest' && this.fileSystem) {
+                this.fileSystem.readonly = value;
+            } else if (this.options.role === 'host') {
+                this.options.connection.room.updatePermissions({
+                    ...(this.permissions ?? {}),
+                    readonly: value
+                });
+            }
+            if (this.permissions) {
+                this.permissions.readonly = value;
+            }
+            this._readonly = value;
+        }
+    }
 
     @postConstruct()
     protected init(): void {
         const connection = this.options.connection;
         this.toDispose.push(Disposable.create(() => this.yjs.destroy()));
         this.toDispose.push(connection);
-        if (this.options.role === 'guest') {
-            this.toDispose.push(this.fileService.registerProvider('collaboration', new CollaborationFileSystemProvider(connection)));
-        }
+        this.toDispose.push(this.onDidCloseEmitter);
         connection.peer.onJoinRequest(async user => {
             const result = await this.messageService.info(
                 `User '${user.name + (user.email ? ` (${user.email})` : '')}' wants to join the collaboration room`,
@@ -136,8 +165,10 @@ export class CollaborationInstance implements Disposable {
         connection.room.onClose(() => {
             this.dispose();
         });
-        connection.onBroadcast(Messages.Room.PermissionsUpdated, (_, permissions) => {
-            console.log('Permissions updated: ' + permissions);
+        connection.room.onPermissions((_, permissions) => {
+            if (this.fileSystem) {
+                this.fileSystem.readonly = permissions.readonly;
+            }
         });
         connection.peer.onInfo(peer => {
             this.identity.resolve(peer);
@@ -145,10 +176,11 @@ export class CollaborationInstance implements Disposable {
         connection.peer.onInit(async () => {
             const roots = await this.workspaceService.roots;
             const response: types.InitResponse = {
+                protocol: PROTOCOL_VERSION,
                 host: await this.identity.promise,
                 guests: Array.from(this.peers.values()),
                 capabilities: {},
-                permissions: {},
+                permissions: this.permissions,
                 workspace: {
                     name: this.workspaceService.workspace?.name ?? 'Collaboration',
                     folders: roots.map(e => e.name)
@@ -307,10 +339,17 @@ export class CollaborationInstance implements Disposable {
     }
 
     async initialize(): Promise<void> {
-        const response = await this.options.connection.peer.init({});
+        const response = await this.options.connection.peer.init({
+            protocol: PROTOCOL_VERSION
+        });
+        this.permissions = response.permissions;
+        this.readonly = response.permissions.readonly;
         for (const peer of [...response.guests, response.host]) {
             this.addPeer(peer);
         }
+        this.fileSystem = new CollaborationFileSystemProvider(this.options.connection);
+        this.fileSystem.readonly = this.readonly;
+        this.toDispose.push(this.fileService.registerProvider('collaboration', this.fileSystem));
         const workspaceDisposable = await this.workspaceService.setHostWorkspace(response.workspace, this.options.connection);
         this.toDispose.push(workspaceDisposable);
     }
@@ -464,6 +503,7 @@ export class CollaborationInstance implements Disposable {
     }
 
     dispose(): void {
+        this.onDidCloseEmitter.fire();
         this.toDispose.dispose();
     }
 }
